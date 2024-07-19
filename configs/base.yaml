@@ -2,7 +2,6 @@ defaults:
   - _self_
   - datasets
   - model
-  - paths
 
 data:
 
@@ -71,10 +70,6 @@ experiment:
   wandb:
     name: ${data.task}_${data.dataset}
     project: se3-fm
-    save_dir: ${paths.wandb_dir}
-  wandb_watch:
-    log: 'all'
-    log_freq: 500
   optimizer:
     lr: 0.0001
   trainer:
@@ -88,14 +83,10 @@ experiment:
     check_val_every_n_epoch: 4
     accumulate_grad_batches: 2
   checkpointer:
-    dirpath: ${paths.ckpt_dir}
+    dirpath: ckpt/${experiment.wandb.project}/${experiment.wandb.name}/${now:%Y-%m-%d}_${now:%H-%M-%S}
     save_last: True
     save_top_k: 3
     monitor: valid/non_coil_percent
     mode: max
   # Keep this null. Will be populated at runtime.
   inference_dir: null
-
-hydra:
-  run:
-    dir: ${paths.log_dir}
