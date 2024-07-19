@@ -10,6 +10,7 @@ from pytorch_lightning.trainer import Trainer
 from pytorch_lightning.callbacks import ModelCheckpoint
 from data.datasets import ScopeDataset, PdbDataset
 from data.protein_dataloader import ProteinData
+from common.utils import PROJECT_ROOT
 from models.flow_module import FlowModule
 from experiments import utils as eu
 import wandb
@@ -56,6 +57,11 @@ class Experiment:
             logger = WandbLogger(
                 **self._exp_cfg.wandb,
             )
+            logger.watch(
+                self._module,
+                log=self._exp_cfg.wandb_watch.log,
+                log_freq=self._exp_cfg.wandb_watch.log_freq
+            )
             
             # Checkpoint directory.
             ckpt_dir = self._exp_cfg.checkpointer.dirpath
@@ -91,7 +97,7 @@ class Experiment:
         )
 
 
-@hydra.main(version_base=None, config_path="../configs", config_name="base.yaml")
+@hydra.main(version_base=None, config_path=str(PROJECT_ROOT / "configs"), config_name="base.yaml")
 def main(cfg: DictConfig):
 
     if cfg.experiment.warm_start is not None and cfg.experiment.warm_start_cfg_override:
