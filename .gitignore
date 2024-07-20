@@ -1,3 +1,4 @@
+notebooks/
 logs/
 wandb/
 wandb*.json
