@@ -148,7 +148,7 @@ class Interpolant:
             scaling * d_t, rotmats_1, rotmats_t)
 
     @staticmethod
-    def _assemble_coords(local_coords, rotmats, trans, bb_num_vec):
+    def _assemble_coords(self, local_coords, rotmats, trans, bb_num_vec):
         """
         Returns:
             coords: numpy array of shape (n_atoms, 3), where local coordinates 
@@ -157,16 +157,17 @@ class Interpolant:
 
         start_idx = 0 
         final_coords = []
+        device = self._device
         for i, num_bb in enumerate(bb_num_vec):
-            bb_local_coord = local_coords[start_idx:start_idx+num_bb]
-            bb_rotmats = rotmats[i]
-            bb_trans = trans[i][None]
+            bb_local_coord = local_coords[start_idx:start_idx+num_bb].to(device)
+            bb_rotmats = rotmats[i].to(device)
+            bb_trans = trans[i][None].to(device)
 
             bb_coords = bb_local_coord @ bb_rotmats.t() + bb_trans
             final_coords.append(bb_coords)
 
             start_idx += num_bb
-        
+
         final_coords = torch.cat(final_coords, dim=0)
 
         return final_coords
