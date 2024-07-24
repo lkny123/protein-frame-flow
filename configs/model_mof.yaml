@@ -30,3 +30,10 @@ model:
     seq_tfmr_num_heads: 4
     seq_tfmr_num_layers: 2
     num_blocks: 6
+  bb_embedder:
+    c_node_dim: 32
+    c_edge_dim: 32
+    c_hidden_dim: 16
+    max_atoms: 100
+    max_radius: 5
+    num_layers: 2
