@@ -147,7 +147,6 @@ class Interpolant:
         return so3_utils.geodesic_t(
             scaling * d_t, rotmats_1, rotmats_t)
 
-    @staticmethod
     def _assemble_coords(self, local_coords, rotmats, trans, bb_num_vec):
         """
         Returns:
