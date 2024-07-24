@@ -230,13 +230,13 @@ class FlowModule(LightningModule):
         num_batch, num_bb = res_mask.shape
         diffuse_mask = batch['diffuse_mask']
         mof_traj, _ = self.interpolant.sample(
-            num_batch,
-            num_bb,
-            self.model,
+            num_batch=num_batch,
+            num_bb=num_bb,
+            model=self.model,
             trans_1=batch['trans_1'],
             rotmats_1=batch['rotmats_1'],
             diffuse_mask=diffuse_mask,
-            bb_emb=batch['bb_emb'],
+            atom_types=batch['atom_types'],
             local_coords=batch['local_coords'],
             bb_num_vec=batch['bb_num_vec']
         )
