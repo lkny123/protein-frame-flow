@@ -79,6 +79,7 @@ class TimeBatcher:
         
         self._sampler_cfg = sampler_cfg
         self._dataset_indices = np.arange(len(dataset))
+        self._dataset = dataset
 
         self._num_batches = math.ceil(len(dataset) / self.num_replicas)
         self.seed = seed
@@ -100,7 +101,16 @@ class TimeBatcher:
         else:
             replica_indices = indices
         
-        repeated_indices = np.repeat(replica_indices[:, None], self.max_batch_size, axis=1)
+        # Dynamically determine max batch size
+        repeated_indices = []
+        for idx in replica_indices:
+            num_atoms = self._dataset[idx]['atom_types'].shape[0]
+            max_batch_size = min(
+                self.max_batch_size,
+                self._sampler_cfg.max_num_res_squared // num_atoms**2 + 1,
+            )
+            repeated_indices.append([idx] * max_batch_size)
+
         return repeated_indices
 
     def _create_batches(self):
