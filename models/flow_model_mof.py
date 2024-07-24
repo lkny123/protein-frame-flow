@@ -4,6 +4,7 @@ from torch import nn
 
 from models.node_feature_net_mof import NodeFeatureNet
 from models.edge_feature_net_mof import EdgeFeatureNet
+from models.bb_embedder import BuildingBlockEmbedder
 from models import ipa_pytorch
 from data import utils as du
 
@@ -18,6 +19,7 @@ class FlowModel(nn.Module):
         self.rigids_nm_to_ang = lambda x: x.apply_trans_fn(lambda x: x * du.NM_TO_ANG_SCALE) 
         self.node_feature_net = NodeFeatureNet(model_conf.node_features)
         self.edge_feature_net = EdgeFeatureNet(model_conf.edge_features)
+        self.bb_embedder = BuildingBlockEmbedder(model_conf.bb_embedder)
 
         # Attention trunk
         self.trunk = nn.ModuleDict()
@@ -55,11 +57,13 @@ class FlowModel(nn.Module):
         node_mask = input_feats['res_mask']
         edge_mask = node_mask[:, None] * node_mask[:, :, None]
         diffuse_mask = input_feats['diffuse_mask']
-        bb_emb = input_feats['bb_emb']
         so3_t = input_feats['so3_t']
         r3_t = input_feats['r3_t']
         trans_t = input_feats['trans_t']
         rotmats_t = input_feats['rotmats_t']
+
+        # Initialize building block embeddings
+        bb_emb = self.bb_embedder(input_feats)
 
         # Initialize node and edge embeddings
         init_node_embed = self.node_feature_net(
