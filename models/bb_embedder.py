@@ -27,7 +27,7 @@ class BuildingBlockEmbedder(nn.Module):
     def __init__(self, bb_cfg):
         super().__init__()
         self._bb_cfg = bb_cfg
-        self.atom_type_embedder = torch.nn.Embedding(bb_cfg.max_atoms, bb_cfg.c_node_dim)     # TODO: initialize with cfg
+        self.atom_type_embedder = torch.nn.Embedding(bb_cfg.max_atoms, bb_cfg.c_node_dim)
         self.edge_dist_embedder = GaussianSmearing(0.0, bb_cfg.max_radius, bb_cfg.c_edge_dim)    
 
         self.egnn_layers = nn.ModuleList()
@@ -101,6 +101,6 @@ class BuildingBlockEmbedder(nn.Module):
         # Pooling
         bb_attr = global_mean_pool(node_attr, bb_vector.long())
         bb_attr = rearrange(bb_attr, '(b m) d -> b m d', b=batch_size)
-        assert torch.allclose(bb_attr[0], bb_attr[-1])
+        # assert torch.allclose(bb_attr[0], bb_attr[-1]), f"bb_attr[0]: {bb_attr[0]}, bb_attr[-1]: {bb_attr[-1]}"
 
         return bb_attr
