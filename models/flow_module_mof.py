@@ -23,6 +23,7 @@ from pytorch_lightning.loggers.wandb import WandbLogger
 from pymatgen.core.structure import Structure
 from pymatgen.core.lattice import Lattice
 from pymatgen.io.cif import CifWriter
+from pymatgen.analysis.structure_matcher import StructureMatcher
 
 
 class FlowModule(LightningModule):
@@ -41,13 +42,19 @@ class FlowModule(LightningModule):
         # Set-up interpolant
         self.interpolant = Interpolant(cfg.interpolant)
 
-        self.validation_epoch_metrics = []
-        self.validation_epoch_samples = []
+        self.rms_dist = []
         self.save_hyperparameters()
 
         self._checkpoint_dir = None
         self._inference_dir = None
 
+        # Setup structure matcher
+        self.matcher = StructureMatcher(
+            stol=cfg.matcher.stol, 
+            angle_tol=cfg.matcher.angle_tol, 
+            ltol=cfg.matcher.ltol
+        )
+    
     @property
     def checkpoint_dir(self):
         if self._checkpoint_dir is None:
@@ -63,6 +70,22 @@ class FlowModule(LightningModule):
             self._checkpoint_dir = checkpoint_dir
             os.makedirs(self._checkpoint_dir, exist_ok=True)
         return self._checkpoint_dir
+
+    @property
+    def inference_dir(self):
+        if self._inference_dir is None:
+            if dist.is_initialized():
+                if dist.get_rank() == 0:
+                    inference_dir = [self._exp_cfg.inference_dir]
+                else:
+                    inference_dir = [None]
+                dist.broadcast_object_list(inference_dir, src=0)
+                inference_dir = inference_dir[0]
+            else:
+                inference_dir = self._exp_cfg.inference_dir
+            self._inference_dir = inference_dir
+            os.makedirs(self._inference_dir, exist_ok=True)
+        return self._inference_dir
 
     def _log_scalar(
         self,
@@ -273,3 +296,70 @@ class FlowModule(LightningModule):
         self._log_scalar(
             "valid/loss", valid_loss, on_step=False, on_epoch=True, prog_bar=True, sync_dist=True, rank_zero_only=False)
         return valid_loss
+    
+    def predict_step(self, batch, batch_idx):
+        device = f'cuda:{torch.cuda.current_device()}'    
+        interpolant = Interpolant(self._infer_cfg.interpolant)
+        interpolant.set_device(device)
+
+        noisy_batch = interpolant.corrupt_batch(batch)          # TODO: Remove
+
+        num_batch, num_bb = batch['res_mask'].shape
+        mof_traj, _ = interpolant.sample(
+            num_batch=num_batch,
+            num_bb=num_bb,
+            model=self.model,
+            trans_1=batch['trans_1'],
+            rotmats_1=batch['rotmats_1'],
+            trans_0=noisy_batch['trans_t'],                     # TODO: Remove
+            rotmats_0=noisy_batch['rotmats_t'],                 # TODO: Remove
+            diffuse_mask=batch['diffuse_mask'],
+            atom_types=batch['atom_types'],
+            local_coords=batch['local_coords'],
+            bb_num_vec=batch['bb_num_vec'],
+        )
+        pred_coords = mof_traj[-1]
+
+        # Set directory
+        sample_dir = os.path.join(
+            self.inference_dir,
+            f'sample_{batch_idx}_len_{num_bb}'
+        )
+        os.makedirs(sample_dir, exist_ok=True)
+
+        # Create structure files
+        lattice = batch['lattice'].squeeze().detach().cpu().numpy() 
+        atom_types = batch['atom_types'].squeeze().detach().cpu().numpy()
+        gt_structure = Structure(
+            lattice=Lattice.from_parameters(*lattice),
+            species=atom_types,
+            coords=batch['gt_coords'].squeeze().detach().cpu().numpy(),
+            coords_are_cartesian=True
+        )
+        pred_structure = Structure(
+            lattice=Lattice.from_parameters(*lattice),
+            species=atom_types,
+            coords=pred_coords.detach().cpu().numpy(),
+            coords_are_cartesian=True
+        )
+
+        # Write CIF files
+        writer = CifWriter(gt_structure)
+        writer.write_file(os.path.join(sample_dir, 'gt.cif'))
+        writer = CifWriter(pred_structure)
+        writer.write_file(os.path.join(sample_dir, 'pred.cif'))
+
+        # Compute RMSD with structure matcher
+        rms_dist = self.matcher.get_rms_dist(gt_structure, pred_structure)
+        rms_dist = None if rms_dist is None else rms_dist[0]
+        self.rms_dist.append(rms_dist)
+        
+    def on_predict_epoch_end(self):
+        rms_dist = np.array(self.rms_dist)
+        match_rate = sum(rms_dist != None) / len(rms_dist)
+        mean_rms_dist = rms_dist[rms_dist != None].mean()
+
+        # Save RMSD results
+        print(f"INFO:: Match rate: {match_rate}, Mean RMSD: {mean_rms_dist}")
+        with open(os.path.join(self.inference_dir, 'results.txt'), 'w') as f:
+            f.write(f"Match rate: {match_rate}, Mean RMSD: {mean_rms_dist}")
