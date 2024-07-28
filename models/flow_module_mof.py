@@ -3,7 +3,7 @@ import torch
 import time
 import os
 import random
-import wandb
+import json
 import numpy as np
 import pandas as pd
 import logging
@@ -42,7 +42,7 @@ class FlowModule(LightningModule):
         # Set-up interpolant
         self.interpolant = Interpolant(cfg.interpolant)
 
-        self.rms_dist = []
+        self.results_df = pd.DataFrame(columns=['batch_id', 'num_bb', 'rms_dist'])
         self.save_hyperparameters()
 
         self._checkpoint_dir = None
@@ -302,8 +302,6 @@ class FlowModule(LightningModule):
         interpolant = Interpolant(self._infer_cfg.interpolant)
         interpolant.set_device(device)
 
-        noisy_batch = interpolant.corrupt_batch(batch)          # TODO: Remove
-
         num_batch, num_bb = batch['res_mask'].shape
         mof_traj, _ = interpolant.sample(
             num_batch=num_batch,
@@ -311,8 +309,6 @@ class FlowModule(LightningModule):
             model=self.model,
             trans_1=batch['trans_1'],
             rotmats_1=batch['rotmats_1'],
-            trans_0=noisy_batch['trans_t'],                     # TODO: Remove
-            rotmats_0=noisy_batch['rotmats_t'],                 # TODO: Remove
             diffuse_mask=batch['diffuse_mask'],
             atom_types=batch['atom_types'],
             local_coords=batch['local_coords'],
@@ -352,14 +348,28 @@ class FlowModule(LightningModule):
         # Compute RMSD with structure matcher
         rms_dist = self.matcher.get_rms_dist(gt_structure, pred_structure)
         rms_dist = None if rms_dist is None else rms_dist[0]
-        self.rms_dist.append(rms_dist)
+
+        # Save row to CSV
+        row = pd.DataFrame({
+            'batch_id': [batch_idx],
+            'num_bb': [num_bb],
+            'rms_dist': [rms_dist]
+        })
+        self.results_df = pd.concat([self.results_df, row], ignore_index=True)
         
     def on_predict_epoch_end(self):
-        rms_dist = np.array(self.rms_dist)
-        match_rate = sum(rms_dist != None) / len(rms_dist)
-        mean_rms_dist = rms_dist[rms_dist != None].mean()
+        # Compute average metrics
+        rms_dist = self.results_df['rms_dist'].dropna()
+        match_rate = len(rms_dist) / len(self.results_df)
+        results = {
+            'match_rate': match_rate,
+            'rms_dist': rms_dist.mean() if len(rms_dist) > 0 else None
+        }
 
-        # Save RMSD results
-        print(f"INFO:: Match rate: {match_rate}, Mean RMSD: {mean_rms_dist}")
-        with open(os.path.join(self.inference_dir, 'results.txt'), 'w') as f:
-            f.write(f"Match rate: {match_rate}, Mean RMSD: {mean_rms_dist}")
+        # Save average metrics to JSON
+        print(f"INFO:: {results}")
+        with open(os.path.join(self.inference_dir, 'average.json'), 'w') as f:
+            json.dump(results, f)
+
+        # Save results to CSV
+        self.results_df.to_csv(os.path.join(self.inference_dir, 'results.csv'))
