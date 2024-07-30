@@ -1,4 +1,6 @@
 import os
+import random
+import numpy as np
 import torch
 import hydra
 from omegaconf import DictConfig, OmegaConf
@@ -36,6 +38,10 @@ class Experiment:
         log.info(f"Training with devices: {self._train_device_ids}")
         self._module: LightningModule = FlowModule(self._cfg)
 
+        if self._exp_cfg.seed is not None:
+            log.info(f'Setting seed to {self._exp_conf.seed}')
+            self._set_seed(self._exp_cfg.seed)
+
     def _setup_dataset(self):
         self._train_dataset = MOFDataset(
             cache_path=os.path.join(self._data_cfg.cache_dir, 'train_dev.pt'),
@@ -47,6 +53,18 @@ class Experiment:
             dataset_cfg=self._data_cfg,
             is_training=False
         )
+
+    def _set_seed(self, seed=42):
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+        os.environ['PYTHONHASHSEED'] = str(seed)
+        
+        # Ensuring deterministic behavior in CUDA
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
         
     def train(self):
         callbacks = []

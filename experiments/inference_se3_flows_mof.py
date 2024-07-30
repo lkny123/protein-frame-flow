@@ -2,6 +2,7 @@
 
 import os
 import time
+import random
 import numpy as np
 import hydra
 import torch
@@ -42,6 +43,10 @@ class EvalRunner:
         self._data_cfg = cfg.data
         self._rng = np.random.default_rng(self._infer_cfg.seed)
 
+        if self._infer_cfg.seed is not None:
+            log.info(f'Setting seed to {self._infer_cfg.seed}')
+            self._set_seed(self._infer_cfg.seed)
+
         # Set-up output directory only on rank 0
         local_rank = os.environ.get('LOCAL_RANK', 0)
         if local_rank == 0:
@@ -69,6 +74,18 @@ class EvalRunner:
     @property
     def inference_dir(self):
         return self._flow_module.inference_dir
+
+    def _set_seed(self, seed=42):
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+        os.environ['PYTHONHASHSEED'] = str(seed)
+        
+        # Ensuring deterministic behavior in CUDA
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
     
     def run_sampling(self):
         devices = GPUtil.getAvailable(
@@ -76,7 +93,7 @@ class EvalRunner:
         log.info(f"Using devices: {devices}")
         log.info(f'Evaluating {self._infer_cfg.task}')
         eval_dataset = MOFDataset(
-            cache_path=os.path.join(self._data_cfg.cache_dir, 'test_mini.pt'),
+            cache_path=os.path.join(self._data_cfg.cache_dir, 'test_100.pt'),
             dataset_cfg=self._data_cfg,
             is_training=False
         )
