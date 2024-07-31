@@ -20,6 +20,7 @@ from data import so3_utils
 from data import residue_constants
 from experiments import utils as eu
 from pytorch_lightning.loggers.wandb import WandbLogger
+from ase import Atoms
 from pymatgen.core.structure import Structure
 from pymatgen.core.lattice import Lattice
 from pymatgen.io.cif import CifWriter
@@ -348,6 +349,18 @@ class FlowModule(LightningModule):
         # Compute RMSD with structure matcher
         rms_dist = self.matcher.get_rms_dist(gt_structure, pred_structure)
         rms_dist = None if rms_dist is None else rms_dist[0]
+
+        # Write xyz files
+        gt_atoms = Atoms(
+            symbols=atom_types,
+            positions=batch['gt_coords'].squeeze().detach().cpu().numpy()
+        )
+        pred_atoms = Atoms(
+            symbols=atom_types,
+            positions=pred_coords.detach().cpu().numpy()
+        )
+        gt_atoms.write(os.path.join(sample_dir, 'gt.xyz'))
+        pred_atoms.write(os.path.join(sample_dir, 'pred.xyz'))
 
         # Save row to CSV
         row = pd.DataFrame({
