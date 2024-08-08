@@ -20,8 +20,8 @@ data:
 
   sampler:
     # Setting for 48GB GPUs
-    max_batch_size: 80
-    max_num_res_squared: 400_000
+    max_batch_size: 160
+    max_num_res_squared: 800_000
 
 interpolant:
   min_t: 1e-2
@@ -93,10 +93,17 @@ experiment:
     dirpath: ${paths.ckpt_dir}
     save_last: True
     save_top_k: 3
-    monitor: valid/rmsd
+    monitor: valid/loss
+    filename: epoch_{epoch}-step_{step}-loss_{valid/loss:.2f}
+    auto_insert_metric_name: False
     mode: min
   # Keep this null. Will be populated at runtime.
   inference_dir: null
+
+matcher:
+  stol: 0.5
+  angle_tol: 10.0
+  ltol: 0.3
 
 hydra:
   run:
