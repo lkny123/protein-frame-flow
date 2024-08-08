@@ -21,9 +21,11 @@ from data import residue_constants
 from experiments import utils as eu
 from pytorch_lightning.loggers.wandb import WandbLogger
 from ase import Atoms
+from pymatgen.core import Molecule
 from pymatgen.core.structure import Structure
 from pymatgen.core.lattice import Lattice
 from pymatgen.io.cif import CifWriter
+from pymatgen.analysis.molecule_matcher import KabschMatcher
 from pymatgen.analysis.structure_matcher import StructureMatcher
 
 
@@ -362,21 +364,30 @@ class FlowModule(LightningModule):
         gt_atoms.write(os.path.join(sample_dir, 'gt.xyz'))
         pred_atoms.write(os.path.join(sample_dir, 'pred.xyz'))
 
+        # Compure RMSD with KabschMatcher
+        gt_mol = Molecule.from_file(os.path.join(sample_dir, 'gt.xyz'))
+        pred_mol = Molecule.from_file(os.path.join(sample_dir, 'pred.xyz'))
+        kabsch_matcher = KabschMatcher(target=gt_mol)
+        _, _, rms_dist_kabsch = kabsch_matcher.match(pred_mol)
+
         # Save row to CSV
         row = pd.DataFrame({
             'batch_id': [batch_idx],
             'num_bb': [num_bb],
-            'rms_dist': [rms_dist]
+            'rms_dist': [rms_dist],
+            'rms_dist_kabsch': [rms_dist_kabsch]                                             # TODO: Remove 
         })
         self.results_df = pd.concat([self.results_df, row], ignore_index=True)
         
     def on_predict_epoch_end(self):
         # Compute average metrics
         rms_dist = self.results_df['rms_dist'].dropna()
+        rms_dist_kabsch = self.results_df['rms_dist_kabsch'].dropna()                        # TODO: Remove
         match_rate = len(rms_dist) / len(self.results_df)
         results = {
             'match_rate': match_rate,
-            'rms_dist': rms_dist.mean() if len(rms_dist) > 0 else None
+            'rms_dist': rms_dist.mean() if len(rms_dist) > 0 else None,
+            'rms_dist_kabsch': rms_dist_kabsch.mean() if len(rms_dist_kabsch) > 0 else None  # TODO: Remove
         }
 
         # Save average metrics to JSON
