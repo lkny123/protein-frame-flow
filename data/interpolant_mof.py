@@ -52,7 +52,7 @@ class Interpolant:
 
     def sample_t(self, num_batch):
         t = torch.rand(num_batch, device=self._device)
-        return t * (1 - self._cfg.min_t) + self._cfg.min_t
+        return t * (1 - 2*self._cfg.min_t) + self._cfg.min_t
 
     def _corrupt_trans(self, trans_1, t, res_mask, diffuse_mask):
         trans_nm_0 = _centered_gaussian(*res_mask.shape, self._device)
